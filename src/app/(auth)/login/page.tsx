@@ -8,6 +8,8 @@ import { AuthButton } from "@/shared/ui/auth-button/AuthButton";
 import { Alert } from "@/shared/ui/alert/Alert";
 import { login as loginApi } from "@/lib/api";
 import { useAuth } from "@/features/auth/useAuth";
+import { validateEmail, validatePassword } from "@/shared/lib/validators";
+import { getErrorMessage } from "@/lib/errorMessages";
 
 /**
  * 로그인 페이지
@@ -33,38 +35,48 @@ export default function LoginPage() {
     setError(null);
 
     // ─────────────────────────────────────────────────
-    // TODO 1: 이메일·비밀번호 validation
-    //   - 이메일이 비어있으면 "이메일을 입력해주세요."
-    //   - 이메일 형식이 올바르지 않으면 "올바른 이메일 형식이 아닙니다."
-    //   - 비밀번호가 비어있으면 "비밀번호를 입력해주세요."
-    //   - 비밀번호 8자 미만이면 "비밀번호는 8자 이상이어야 합니다."
+    // Validation
     // ─────────────────────────────────────────────────
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.isValid) {
+      setError(emailValidation.error || "이메일을 입력해주세요.");
+      return;
+    }
+
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.isValid) {
+      setError(passwordValidation.error || "비밀번호를 입력해주세요.");
+      return;
+    }
 
     // ─────────────────────────────────────────────────
-    // TODO 2: 로딩 상태 처리
-    //   - API 호출 전 setLoading(true)
-    //   - API 호출 후 (성공/실패 모두) setLoading(false)
+    // 로딩 상태 처리
     // ─────────────────────────────────────────────────
+    setLoading(true);
 
     try {
       const result = await loginApi(email, password);
 
       // ───────────────────────────────────────────────
-      // TODO 3: 에러 응답 처리
-      //   - result.success === false 이면 에러코드에 따라
-      //     사용자 친화적 메시지를 setError로 보여주세요.
-      //   예) "INVALID_CREDENTIALS" → "이메일 또는 비밀번호가 올바르지 않습니다."
-      //       "EMAIL_NOT_VERIFIED"  → "이메일 인증을 완료해주세요."
+      // 에러 응답 처리
       // ───────────────────────────────────────────────
+      if (!result.success) {
+        const errorMessage = getErrorMessage(result.errorCode || "UNKNOWN_ERROR");
+        setError(errorMessage);
+        return;
+      }
 
       // ───────────────────────────────────────────────
-      // TODO 4: 로그인 성공 처리
-      //   - result.success === true && "accessToken" in result 이면
-      //     1) authLogin(result.accessToken)  → 토큰 저장
-      //     2) router.push("/main")          → 메인으로 이동
+      // 로그인 성공 처리
       // ───────────────────────────────────────────────
+      if ("accessToken" in result) {
+        authLogin(result.accessToken);
+        router.push("/main");
+      }
     } catch {
       setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+    } finally {
+      setLoading(false);
     }
   };
 
