@@ -26,10 +26,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. (선택) 이메일 인증 여부 확인
-    // 이메일 인증을 필수로 하고 싶다면 아래 주석 해제
-    // if (!user.isEmailVerified) {
-    //   return NextResponse.json(error("EMAIL_NOT_VERIFIED"), { status: 403 });
-    // }
+    if (!user.isEmailVerified) {
+      return NextResponse.json(error("EMAIL_NOT_VERIFIED"), { status: 403 });
+    }
 
     // 4. Mock 토큰 발급
     const accessToken = `mock-token-${user.email}-${Date.now()}`;

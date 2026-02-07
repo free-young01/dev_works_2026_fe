@@ -1,84 +1,62 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { TextField } from "@/shared/ui/text-field/TextField";
 import { AuthButton } from "@/shared/ui/auth-button/AuthButton";
 import { Alert } from "@/shared/ui/alert/Alert";
 import { signup as signupApi } from "@/lib/api";
-import { validateEmail, validatePassword, validatePasswordConfirm } from "@/shared/lib/validators";
+import { signupSchema, type SignupFormData } from "@/lib/auth.schemas";
 import { getErrorMessage } from "@/lib/errorMessages";
 
 /**
  * 회원가입 페이지
  * ──────────────
- * 기본 폼 UI가 갖춰져 있습니다.
- * 아래 TODO 들을 완성해 주세요!
+ * react-hook-form + zod로 폼 검증 & 상태 관리
  */
 export default function SignupPage() {
   const router = useRouter();
 
-  // ── 폼 상태 ────────────────────────────────────────
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-
-  // ── UI 상태 ────────────────────────────────────────
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const {
+    control,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+    setError: setFormError,
+  } = useForm<SignupFormData>({
+    resolver: zodResolver(signupSchema),
+    mode: "onBlur",
+    defaultValues: {
+      email: "",
+      password: "",
+      confirmPassword: "",
+    },
+  });
 
   // ── 폼 제출 핸들러 ────────────────────────────────
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    // ─────────────────────────────────────────────────
-    // Validation
-    // ─────────────────────────────────────────────────
-    const emailValidation = validateEmail(email);
-    if (!emailValidation.isValid) {
-      setError(emailValidation.error || "이메일을 입력해주세요.");
-      return;
-    }
-
-    const passwordValidation = validatePassword(password);
-    if (!passwordValidation.isValid) {
-      setError(passwordValidation.error || "비밀번호를 입력해주세요.");
-      return;
-    }
-
-    const confirmValidation = validatePasswordConfirm(password, confirmPassword);
-    if (!confirmValidation.isValid) {
-      setError(confirmValidation.error || "비밀번호 확인을 입력해주세요.");
-      return;
-    }
-
-    // ─────────────────────────────────────────────────
-    // 로딩 상태 처리
-    // ─────────────────────────────────────────────────
-    setLoading(true);
-
+  const onSubmit = async (data: SignupFormData) => {
     try {
-      const result = await signupApi(email, password);
+      const result = await signupApi(data.email, data.password);
 
       // ───────────────────────────────────────────────
       // 에러 응답 처리
       // ───────────────────────────────────────────────
       if (!result.success) {
         const errorMessage = getErrorMessage(result.errorCode || "UNKNOWN_ERROR");
-        setError(errorMessage);
+        setFormError("root", { message: errorMessage });
         return;
       }
 
       // ───────────────────────────────────────────────
       // 회원가입 성공 처리
       // ───────────────────────────────────────────────
-      router.push("/login");
+      router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
-    } finally {
-      setLoading(false);
+      setFormError("root", {
+        message: "네트워크 오류가 발생했습니다. 다시 시도해주세요.",
+      });
     }
   };
 
@@ -94,35 +72,68 @@ export default function SignupPage() {
         </div>
 
         {/* 에러 알림 */}
-        <Alert message={error} variant="error" />
+        <Alert message={errors.root?.message || null} variant="error" />
 
         {/* 폼 */}
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <TextField
-            label="이메일"
-            type="email"
-            placeholder="you@sogang.ac.kr"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+          <div>
+            <Controller
+              name="email"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  label="이메일"
+                  type="email"
+                  placeholder="you@sogang.ac.kr"
+                  value={field.value || ""}
+                  onChange={field.onChange}
+                />
+              )}
+            />
+            {errors.email && (
+              <p className="mt-1 text-sm text-red-500">{errors.email.message}</p>
+            )}
+          </div>
 
-          <TextField
-            label="비밀번호"
-            type="password"
-            placeholder="8자 이상 입력"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <div>
+            <Controller
+              name="password"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  label="비밀번호"
+                  type="password"
+                  placeholder="8자 이상 입력"
+                  value={field.value || ""}
+                  onChange={field.onChange}
+                />
+              )}
+            />
+            {errors.password && (
+              <p className="mt-1 text-sm text-red-500">{errors.password.message}</p>
+            )}
+          </div>
 
-          <TextField
-            label="비밀번호 확인"
-            type="password"
-            placeholder="비밀번호를 다시 입력"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-          />
+          <div>
+            <Controller
+              name="confirmPassword"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  label="비밀번호 확인"
+                  type="password"
+                  placeholder="비밀번호를 다시 입력"
+                  value={field.value || ""}
+                  onChange={field.onChange}
+                />
+              )}
+            />
+            {errors.confirmPassword && (
+              <p className="mt-1 text-sm text-red-500">{errors.confirmPassword.message}</p>
+            )}
+          </div>
 
-          <AuthButton type="submit" loading={loading}>
+          <AuthButton type="submit" loading={isSubmitting}>
             회원가입
           </AuthButton>
         </form>

@@ -1,68 +1,58 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { TextField } from "@/shared/ui/text-field/TextField";
 import { AuthButton } from "@/shared/ui/auth-button/AuthButton";
 import { Alert } from "@/shared/ui/alert/Alert";
 import { login as loginApi } from "@/lib/api";
 import { useAuth } from "@/features/auth/useAuth";
-import { validateEmail, validatePassword } from "@/shared/lib/validators";
+import { loginSchema, type LoginFormData } from "@/lib/auth.schemas";
 import { getErrorMessage } from "@/lib/errorMessages";
 
 /**
  * 로그인 페이지
  * ─────────────
- * 기본 폼 UI가 갖춰져 있습니다.
- * 아래 TODO 들을 완성해 주세요!
+ * react-hook-form + zod로 폼 검증 & 상태 관리
  */
 export default function LoginPage() {
   const router = useRouter();
   const { login: authLogin } = useAuth();
 
-  // ── 폼 상태 ────────────────────────────────────────
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
-  // ── UI 상태 ────────────────────────────────────────
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const {
+    control,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+    setError: setFormError,
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+    mode: "onBlur",
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
 
   // ── 폼 제출 핸들러 ────────────────────────────────
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    // ─────────────────────────────────────────────────
-    // Validation
-    // ─────────────────────────────────────────────────
-    const emailValidation = validateEmail(email);
-    if (!emailValidation.isValid) {
-      setError(emailValidation.error || "이메일을 입력해주세요.");
-      return;
-    }
-
-    const passwordValidation = validatePassword(password);
-    if (!passwordValidation.isValid) {
-      setError(passwordValidation.error || "비밀번호를 입력해주세요.");
-      return;
-    }
-
-    // ─────────────────────────────────────────────────
-    // 로딩 상태 처리
-    // ─────────────────────────────────────────────────
-    setLoading(true);
-
+  const onSubmit = async (data: LoginFormData) => {
     try {
-      const result = await loginApi(email, password);
+      const result = await loginApi(data.email, data.password);
 
       // ───────────────────────────────────────────────
       // 에러 응답 처리
       // ───────────────────────────────────────────────
       if (!result.success) {
+        // 이메일 인증 미완료 시 인증 페이지로 리다이렉트
+        if (result.errorCode === "EMAIL_NOT_VERIFIED") {
+          router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
+          return;
+        }
+
         const errorMessage = getErrorMessage(result.errorCode || "UNKNOWN_ERROR");
-        setError(errorMessage);
+        setFormError("root", { message: errorMessage });
         return;
       }
 
@@ -74,9 +64,9 @@ export default function LoginPage() {
         router.push("/main");
       }
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
-    } finally {
-      setLoading(false);
+      setFormError("root", {
+        message: "네트워크 오류가 발생했습니다. 다시 시도해주세요.",
+      });
     }
   };
 
@@ -92,27 +82,47 @@ export default function LoginPage() {
         </div>
 
         {/* 에러 알림 */}
-        <Alert message={error} variant="error" />
+        <Alert message={errors.root?.message || null} variant="error" />
 
         {/* 폼 */}
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <TextField
-            label="이메일"
-            type="email"
-            placeholder="you@sogang.ac.kr"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+          <div>
+            <Controller
+              name="email"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  label="이메일"
+                  type="email"
+                  placeholder="you@sogang.ac.kr"
+                  {...field}
+                />
+              )}
+            />
+            {errors.email && (
+              <p className="mt-1 text-sm text-red-500">{errors.email.message}</p>
+            )}
+          </div>
 
-          <TextField
-            label="비밀번호"
-            type="password"
-            placeholder="8자 이상 입력"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <div>
+            <Controller
+              name="password"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  label="비밀번호"
+                  type="password"
+                  placeholder="8자 이상 입력"
+                  {...field}
+                />
+              )}
+            />
+            {errors.password && (
+              <p className="mt-1 text-sm text-red-500">{errors.password.message}</p>
+            )}
+          </div>
 
-          <AuthButton type="submit" loading={loading}>
+          <AuthButton type="submit" loading={isSubmitting}>
             로그인
           </AuthButton>
         </form>

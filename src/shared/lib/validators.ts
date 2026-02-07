@@ -10,13 +10,14 @@
  * @returns { isValid: boolean, error?: string }
  */
 export function validateEmail(email: string): { isValid: boolean; error?: string } {
-  if (!email.trim()) {
+  const trimmedEmail = email.trim();
+  if (!trimmedEmail) {
     return { isValid: false, error: "이메일을 입력해주세요." };
   }
 
   // 기본적인 이메일 형식 검증 (RFC 5322 간소화)
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
+  if (!emailRegex.test(trimmedEmail)) {
     return { isValid: false, error: "올바른 이메일 형식이 아닙니다." };
   }
 

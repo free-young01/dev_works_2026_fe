@@ -1,11 +1,15 @@
 "use client";
 
-import React, { Suspense, useState } from "react";
+import React, { Suspense, useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { TextField } from "@/shared/ui/text-field/TextField";
 import { AuthButton } from "@/shared/ui/auth-button/AuthButton";
 import { Alert } from "@/shared/ui/alert/Alert";
 import { sendEmailCode, verifyEmailCode } from "@/lib/api";
+import { verifyEmailSchema, type VerifyEmailFormData } from "@/lib/auth.schemas";
+import { getErrorMessage } from "@/lib/errorMessages";
 
 /**
  * 이메일 인증 페이지 (선택 기능)
@@ -33,51 +37,84 @@ function VerifyEmailContent() {
   const router = useRouter();
   const email = searchParams.get("email") ?? "";
 
-  // ── 상태 ────────────────────────────────────────
-  const [code, setCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  // ── form 상태 ────────────────────────────────────
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+    setError: setFormError,
+    reset,
+    control,
+  } = useForm<VerifyEmailFormData>({
+    resolver: zodResolver(verifyEmailSchema),
+    mode: "onBlur",
+    defaultValues: {
+      code: "",
+    },
+  });
+
+  // ── UI 상태 ────────────────────────────────────
   const [success, setSuccess] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [codeSent, setCodeSent] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(0); // 재발송 타이머
+
+  // ── 타이머 이펙트 ────────────────────────────────
+  useEffect(() => {
+    if (timeLeft <= 0) return;
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [timeLeft]);
 
   // ── 인증 코드 발송 ────────────────────────────────
   const handleSendCode = async () => {
-    setError(null);
     setSuccess(null);
+    setFormError("root", {});
 
-    // ─────────────────────────────────────────────────
-    // TODO 1: 코드 발송 로직
-    //   - setLoading(true)
-    //   - sendEmailCode(email) 호출
-    //   - 성공 시: setCodeSent(true), setSuccess("인증 코드가 발송되었습니다.")
-    //   - 실패 시: setError(에러 메시지)
-    //   - finally: setLoading(false)
-    // ─────────────────────────────────────────────────
+    try {
+      const result = await sendEmailCode(email.trim());
 
-    // ─────────────────────────────────────────────────
-    // TODO 2 (선택): 재발송 타이머 UX
-    //   - 코드 발송 후 60초 카운트다운
-    //   - 카운트다운 중에는 "재발송" 버튼 비활성화
-    //   - 남은 시간 표시: "재발송 (45초)"
-    // ─────────────────────────────────────────────────
+      if (!result.success) {
+        const errorMessage = getErrorMessage(result.errorCode || "UNKNOWN_ERROR");
+        setFormError("root", { message: errorMessage });
+        return;
+      }
+
+      setCodeSent(true);
+      setSuccess("인증 코드가 발송되었습니다.");
+      setTimeLeft(60); // 60초 타이머 시작
+    } catch {
+      setFormError("root", {
+        message: "네트워크 오류가 발생했습니다. 다시 시도해주세요.",
+      });
+    }
   };
 
   // ── 인증 코드 검증 ────────────────────────────────
-  const handleVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+  const onSubmit = async (data: VerifyEmailFormData) => {
     setSuccess(null);
 
-    // ─────────────────────────────────────────────────
-    // TODO 3: 코드 검증 로직
-    //   - 코드가 비어있으면 "인증 코드를 입력해주세요." 에러
-    //   - setLoading(true)
-    //   - verifyEmailCode(email, code) 호출
-    //   - 성공 시: setSuccess("이메일 인증이 완료되었습니다!") → 잠시 후 router.push("/login")
-    //   - 실패 시: 에러코드에 따른 메시지 표시
-    //     예) "INVALID_OR_EXPIRED_CODE" → "인증 코드가 만료되었거나 올바르지 않습니다."
-    //   - finally: setLoading(false)
-    // ─────────────────────────────────────────────────
+    try {
+      const result = await verifyEmailCode(email.trim(), data.code);
+
+      if (!result.success) {
+        const errorMessage = getErrorMessage(result.errorCode || "UNKNOWN_ERROR");
+        setFormError("root", { message: errorMessage });
+        return;
+      }
+
+      setSuccess("이메일 인증이 완료되었습니다!");
+
+      // 1초 후 로그인 페이지로 이동
+      setTimeout(() => {
+        router.push("/login");
+      }, 1000);
+    } catch {
+      setFormError("root", {
+        message: "네트워크 오류가 발생했습니다. 다시 시도해주세요.",
+      });
+    }
   };
 
   return (
@@ -97,36 +134,51 @@ function VerifyEmailContent() {
         </div>
 
         {/* 알림 */}
-        <Alert message={error} variant="error" />
+        <Alert message={errors.root?.message || null} variant="error" />
         <Alert message={success} variant="success" />
 
         {/* 코드 발송 버튼 */}
         {!codeSent && (
-          <AuthButton onClick={handleSendCode} loading={loading}>
+          <AuthButton onClick={handleSendCode} loading={isSubmitting}>
             인증 코드 발송
           </AuthButton>
         )}
 
         {/* 코드 입력 폼 */}
         {codeSent && (
-          <form onSubmit={handleVerify} className="space-y-5">
-            <TextField
-              label="인증 코드"
-              type="text"
-              placeholder="6자리 코드 입력"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-            />
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            <div>
+              <Controller
+                name="code"
+                control={control}
+                render={({ field }) => (
+                  <TextField
+                    label="인증 코드"
+                    type="text"
+                    placeholder="6자리 코드 입력"
+                    {...field}
+                  />
+                )}
+              />
+              {errors.code && (
+                <p className="mt-1 text-sm text-red-500">{errors.code.message}</p>
+              )}
+            </div>
 
-            <AuthButton type="submit" loading={loading}>
+            <AuthButton type="submit" loading={isSubmitting}>
               인증 확인
             </AuthButton>
 
             <button
               type="button"
               onClick={handleSendCode}
-              className="w-full text-center text-sm text-gray-600 hover:text-sogang-700 dark:text-gray-400">
-              코드 재발송
+              disabled={timeLeft > 0 || isSubmitting}
+              className={`w-full text-center text-sm ${
+                timeLeft > 0
+                  ? "cursor-not-allowed text-gray-400"
+                  : "text-gray-600 hover:text-sogang-700 dark:text-gray-400"
+              }`}>
+              {timeLeft > 0 ? `코드 재발송 (${timeLeft}초)` : "코드 재발송"}
             </button>
           </form>
         )}

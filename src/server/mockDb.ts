@@ -26,15 +26,17 @@ const verificationCodes: Map<string, VerificationCode> = new Map();
 
 /** 이메일로 유저 검색 */
 export function findUser(email: string): User | undefined {
-  return users.find((u) => u.email === email);
+  const trimmedEmail = email.trim();
+  return users.find((u) => u.email === trimmedEmail);
 }
 
 /** 새 유저 생성 — 이미 존재하면 null 반환 */
 export function createUser(email: string, password: string): User | null {
-  if (findUser(email)) return null;
+  const trimmedEmail = email.trim();
+  if (findUser(trimmedEmail)) return null;
 
   const user: User = {
-    email,
+    email: trimmedEmail,
     password,
     isEmailVerified: false,
     createdAt: Date.now(),
@@ -48,7 +50,8 @@ export function validateLogin(
   email: string,
   password: string,
 ): User | null {
-  const user = findUser(email);
+  const trimmedEmail = email.trim();
+  const user = findUser(trimmedEmail);
   if (!user) return null;
   if (user.password !== password) return null;
   return user;
@@ -56,7 +59,8 @@ export function validateLogin(
 
 /** 이메일 인증 완료 처리 */
 export function markEmailVerified(email: string): boolean {
-  const user = findUser(email);
+  const trimmedEmail = email.trim();
+  const user = findUser(trimmedEmail);
   if (!user) return false;
   user.isEmailVerified = true;
   return true;
@@ -71,8 +75,9 @@ const CODE_TTL_MS = 5 * 60 * 1000; // 5분
  * (행사용이므로 고정 코드 "123456")
  */
 export function issueCode(email: string): string {
+  const trimmedEmail = email.trim();
   const code = "123456";
-  verificationCodes.set(email, {
+  verificationCodes.set(trimmedEmail, {
     code,
     expiresAt: Date.now() + CODE_TTL_MS,
   });
@@ -81,17 +86,18 @@ export function issueCode(email: string): string {
 
 /** 인증 코드 검증 */
 export function verifyCode(email: string, code: string): boolean {
-  const entry = verificationCodes.get(email);
+  const trimmedEmail = email.trim();
+  const entry = verificationCodes.get(trimmedEmail);
   if (!entry) return false;
   if (Date.now() > entry.expiresAt) {
-    verificationCodes.delete(email);
+    verificationCodes.delete(trimmedEmail);
     return false;
   }
   if (entry.code !== code) return false;
 
   // 성공 시 코드 삭제 & 이메일 인증 마킹
-  verificationCodes.delete(email);
-  markEmailVerified(email);
+  verificationCodes.delete(trimmedEmail);
+  markEmailVerified(trimmedEmail);
   return true;
 }
 
